@@ -4,18 +4,16 @@ local CoroutineSystem = {
     _frameCount = 0
 }
 
-
 function CoroutineSystem.Start(func)
     local co = coroutine.create(func)
     table.insert(CoroutineSystem._active, {
         coroutine = co,
         waitType = nil,
-        waitValue = 0
+        waitValue = nil
     })
     return co
 end
 
--- Обновление состояния корутин (вызывать каждый кадр)
 function CoroutineSystem.Update()
     CoroutineSystem._frameCount = CoroutineSystem._frameCount + 1
     CoroutineSystem._timer = os.clock()
@@ -24,10 +22,13 @@ function CoroutineSystem.Update()
         local entry = CoroutineSystem._active[i]
         local shouldResume = false
 
+        -- Проверка условий ожидания
         if entry.waitType == "seconds" then
             shouldResume = CoroutineSystem._timer >= entry.waitValue
         elseif entry.waitType == "frames" then
             shouldResume = CoroutineSystem._frameCount >= entry.waitValue
+        elseif entry.waitType == "coroutine" then
+            shouldResume = coroutine.status(entry.waitValue) == "dead"
         else
             shouldResume = true
         end
@@ -61,13 +62,16 @@ local function WaitForEndOfFrame()
     return coroutine.yield("frames", CoroutineSystem._frameCount + 1)
 end
 
+-- Новый метод: ожидание другой корутины
+local function WaitForCoroutine(co)
+    return coroutine.yield("coroutine", co)
+end
+
 return {
-    -- Системные методы
     Start = CoroutineSystem.Start,
     Update = CoroutineSystem.Update,
-    
-    -- Методы ожидания
     WaitForSeconds = WaitForSeconds,
     WaitForFrames = WaitForFrames,
-    WaitForEndOfFrame = WaitForEndOfFrame
+    WaitForEndOfFrame = WaitForEndOfFrame,
+    WaitForCoroutine = WaitForCoroutine
 }
