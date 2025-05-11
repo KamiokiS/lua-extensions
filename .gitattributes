@@ -1,2 +1,12 @@
-# Auto detect text files and perform LF normalization
+# Автоматическое определение типов файлов
 * text=auto
+
+# Все .lua файлы — текстовые, LF (для Unix/Linux/macOS)
+*.lua text eol=lf
+
+# Исключаем IDE-настройки из ZIP
+.vscode/ export-ignore
+.idea/ export-ignore
+
+# Не делать merge автоматически для lua-файлов
+*.lua merge=text

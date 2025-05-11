@@ -1,0 +1,6 @@
+/.vscode
+/assets
+EBOOT.PBP
+error_log.txt
+luaFont.pgf
+script.lua
