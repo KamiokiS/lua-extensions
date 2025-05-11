@@ -48,14 +48,15 @@ Tween.easing = {
 
 
 -- Добавление новой анимации
-function Tween.to(obj, target, duration, easing)
+function Tween.to(obj, target, duration, easing, onComplete)
     table.insert(Tween.animations, {
         obj = obj,
         start = { x = obj.x, y = obj.y },
         target = target,
         duration = duration,
         elapsed = 0,
-        easing = easing or function(t) return t end -- линейное изменение по умолчанию
+        easing = easing or Tween.easing.linear,
+        onComplete = onComplete 
     })
 end
 
@@ -72,6 +73,9 @@ function Tween.update(dt)
         anim.obj.y = anim.start.y + (anim.target.y - anim.start.y) * easedT
 
         if t >= 1 then
+            if anim.onComplete then
+                anim.onComplete() -- Вызов обратного вызова
+            end
             table.remove(Tween.animations, i)
         end
     end
