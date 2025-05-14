@@ -5,3 +5,4 @@ error_log.txt
 luaFont.pgf
 script.lua
 /sprites
+*.png
