@@ -30,6 +30,9 @@ Tween.easing = {
         local c4 = (2 * math.pi) / 3
         return t == 0 and 0 or t == 1 and 1 or 2^(-10 * t) * math.sin((t * 10 - 0.75) * c4) + 1
     end,
+    bounceIn = function(t)
+        return 1 - Tween.easing.bounceOut(1 - t)
+    end,
     bounceOut = function(t) --более ресурсозатратная
         if t < 1/2.75 then
             return 7.5625 * t * t
@@ -46,40 +49,139 @@ Tween.easing = {
     end
 }
 
+-- Внутренний класс для анимации
+local TweenInstance = {}
+TweenInstance.__index = TweenInstance
 
-
-
--- Добавление новой анимации
-function Tween.to(obj, target, duration, easing)
-    table.insert(Tween.animations, {
-        obj = obj,
-        start = { x = obj.x, y = obj.y },
-        target = target,
-        duration = duration,
-        elapsed = 0,
-        easing = easing or function(t) return t end -- линейное изменение по умолчанию
-
-    })
+function TweenInstance.new(obj, target, duration)
+    local self = setmetatable({}, TweenInstance)
+    
+    self.obj = obj
+    self.start = {}
+    self.target = {}
+    self.duration = duration
+    self.elapsed = 0
+    self.easing = Tween.easing.linear
+    self.isRelative = false
+    self.onComplete = nil
+    self.isDead = false  
+    
+    -- Инициализируем стартовые значения и целевые значения
+    for key, value in pairs(target) do
+        self.start[key] = obj[key]
+        self.target[key] = value
+    end
+    
+    return self
 end
 
--- Обновление анимаций (вызывается каждый кадр)
+function TweenInstance:SetRelative()
+    self.isRelative = true
+    return self
+end
+
+function TweenInstance:SetEase(easing)
+    self.easing = easing
+    return self
+end
+
+function TweenInstance:OnComplete(callback)
+    self.onComplete = callback
+    return self
+end
+
+function TweenInstance:Kill()
+    self.isDead = true  -- Помечаем твин для удаления
+    return self
+end
+
+function TweenInstance:update(dt)
+    self.elapsed = self.elapsed + dt
+    local t = math.min(self.elapsed / self.duration, 1)
+    local easedT = self.easing(t)
+    
+    for key, targetValue in pairs(self.target) do
+        local startValue = self.start[key]
+        local finalValue = self.isRelative and (startValue + targetValue) or targetValue
+        self.obj[key] = startValue + (finalValue - startValue) * easedT
+    end
+    
+    return t >= 1
+end
+
+-- Внутри класса TweenInstance
+function TweenInstance:Complete()
+    self.elapsed = self.duration  -- Устанавливаем время в конец
+    self:update(0)  -- Принудительно обновляем состояние до конечного
+    self:Kill()  -- Удаляем твин
+    return self
+end
+
+-- Основной метод для произвольных свойств
+function Tween.to(obj, target, duration)
+    local instance = TweenInstance.new(obj, target, duration)
+    table.insert(Tween.animations, instance)
+    return instance
+end
+
+-- Специализированные методы для конкретных свойств
+function Tween.MoveX(obj, x, duration)
+    return Tween.to(obj, {x = x}, duration)
+end
+
+function Tween.MoveY(obj, y, duration)
+    return Tween.to(obj, {y = y}, duration)
+end
+
+function Tween.Move(obj, x, y, duration)
+    return Tween.to(obj, {x = x, y = y}, duration)
+end
+
+function Tween.ScaleX(obj, scaleX, duration)
+    return Tween.to(obj, {scaleX = scaleX}, duration)
+end
+
+function Tween.ScaleY(obj, scaleY, duration)
+    return Tween.to(obj, {scaleY = scaleY}, duration)
+end
+
+function Tween.Scale(obj, scale, duration)
+    return Tween.to(obj, {scale = scale}, duration)
+end
+
+function Tween.Alpha(obj, alpha, duration)
+    return Tween.to(obj, {alpha = alpha}, duration)
+end
+
+function Tween.Rotation(obj, rotation, duration)
+    return Tween.to(obj, {rotation = rotation}, duration)
+end
+
+-- Глобальные методы управления твинами
+function Tween.KillAll()
+    Tween.animations = {}
+end
+
 function Tween.update(dt)
     for i = #Tween.animations, 1, -1 do
         local anim = Tween.animations[i]
-        anim.elapsed = anim.elapsed + dt
-
-        local t = math.min(anim.elapsed / anim.duration, 1)
-        local easedT = anim.easing(t)
-
-        anim.obj.x = anim.start.x + (anim.target.x - anim.start.x) * easedT
-        anim.obj.y = anim.start.y + (anim.target.y - anim.start.y) * easedT
-
-        if t >= 1 then
+        
+        -- Если твин помечен как "убитый"
+        if anim.isDead then
             table.remove(Tween.animations, i)
+        else
+            local isCompleted = anim:update(dt)
+            
+            if isCompleted then
+                if anim.onComplete then
+                    anim.onComplete()
+                end
+                table.remove(Tween.animations, i)
+            end
         end
     end
-    -- Logger.log(#Tween.animations)
 end
+
 
 
 return Tween
