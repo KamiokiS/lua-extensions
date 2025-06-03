@@ -1,6 +1,15 @@
 -- tween.lua
 local Tween = {}
 
+local function removeTweenFromGlobal(tween)
+    for i = #Tween.animations, 1, -1 do
+        if Tween.animations[i] == tween then
+            table.remove(Tween.animations, i)
+            break
+        end
+    end
+end
+
 -- Хранилище активных анимаций
 Tween.animations = {}
 
@@ -49,6 +58,172 @@ Tween.easing = {
     end
 }
 
+-- Класс для управления последовательностями анимаций
+local Sequence = {}
+Sequence.__index = Sequence
+
+function Sequence.new()
+    local self = setmetatable({}, Sequence)
+    self.elements = {}      -- Список элементов (твины/задержки)
+    self.currentTime = 0    -- Текущее время в последовательности
+    self.duration = 0       -- Общая длительность последовательности
+    self.isDead = false     -- Флаг завершения
+    self.onComplete = nil   -- Callback при завершении
+    self.isPaused = false
+    self.isSequence = true
+    return self
+end
+
+function Sequence:Append(tween)
+    Logger.log("Добавили секвенцию")
+    local startTime = self.duration
+    local element = {
+        type = "tween",
+        tween = tween,
+        startTime = startTime,
+        duration = tween.duration,
+        completed = false
+    }
+    table.insert(self.elements, element)
+    self.duration = self.duration + tween.duration
+    removeTweenFromGlobal(tween)
+    return self
+end
+
+function Sequence:Join(tween)
+    Logger.log("присоединили секвенцию")
+    if #self.elements == 0 then
+        return self:Append(tween)
+    end
+    local lastElement = self.elements[#self.elements]
+    local element = {
+        type = "tween",
+        tween = tween,
+        startTime = lastElement.startTime,
+        duration = tween.duration,
+        completed = false
+    }
+    table.insert(self.elements, element)
+    local endTime = element.startTime + element.duration
+    if endTime > self.duration then
+        self.duration = endTime
+    end
+    removeTweenFromGlobal(tween)
+    return self
+end
+
+function Sequence:AppendInterval(delay)
+    local element = {
+        type = "delay",
+        startTime = self.duration,
+        duration = delay
+    }
+    table.insert(self.elements, element)
+    self.duration = self.duration + delay
+    return self
+end
+
+function Sequence:OnComplete(callback)
+    self.onComplete = callback
+    return self
+end
+
+function Sequence:update(dt)
+    if self.isDead or self.isPaused then return end
+    self.currentTime = self.currentTime + dt
+
+    Logger.log("Обновляем секвенцию")
+    -- Обновляем элементы последовательности
+    for _, element in ipairs(self.elements) do
+        if element.type == "tween" and not element.completed then
+            local elapsed = self.currentTime - element.startTime
+            if elapsed >= element.duration then
+                -- Завершаем элемент (работает для твина и последовательности)
+                element.tween:Complete()
+                element.completed = true
+            elseif elapsed > 0 then
+                -- Обновление для последовательности
+                if element.tween.isSequence then
+                    element.tween.currentTime = math.min(elapsed, element.tween.duration)
+                    element.tween:update(0)
+                -- Обновление для обычного твина
+                else
+                    element.tween.elapsed = elapsed
+                    element.tween:update(0)
+                end
+            end
+        end
+    end
+
+    
+    -- Проверка завершения всей последовательности
+    if self.currentTime >= self.duration then
+        if self.onComplete then
+            self.onComplete()
+        end
+        self.isDead = true
+    end
+end
+
+function Sequence:Kill(complete)
+    if self.isDead then return end
+    self.isDead = true
+    removeTweenFromGlobal(self)
+    
+    -- Убиваем все вложенные твины
+    for _, element in ipairs(self.elements) do
+        if element.type == "tween" and not element.tween.isDead then
+            element.tween:Kill(false)
+        end
+    end
+    
+    if complete and self.onComplete then
+        self.onComplete()
+    end
+end
+
+function Sequence:Complete()
+    if self.isDead then return end
+    self.isDead = true
+    self.currentTime = self.duration
+    
+    -- Завершаем все вложенные твины
+    for _, element in ipairs(self.elements) do
+        if element.type == "tween" and not element.completed then
+            element.tween:Complete()
+        end
+    end
+    
+    if self.onComplete then
+        self.onComplete()
+    end
+    removeTweenFromGlobal(self)
+end
+
+function Sequence:Rewind()
+    self.currentTime = 0
+    for _, element in ipairs(self.elements) do
+        if element.type == "tween" then
+            element.tween:Rewind()
+        end
+        element.completed = false
+    end
+end
+
+function Sequence:Pause()
+    self.isPaused = true
+end
+
+function Sequence:Play()
+    self.isPaused = false
+end
+
+function Tween.Sequence()
+    local seq = Sequence.new()
+    table.insert(Tween.animations, seq)
+    return seq
+end
+
 -- Внутренний класс для анимации
 local TweenInstance = {}
 TweenInstance.__index = TweenInstance
@@ -64,7 +239,8 @@ function TweenInstance.new(obj, target, duration)
     self.easing = Tween.easing.linear
     self.isRelative = false
     self.onComplete = nil
-    self.isDead = false  
+    self.isDead = false
+    self.isTween = true
     
     -- Инициализируем стартовые значения и целевые значения
     for key, value in pairs(target) do
@@ -90,13 +266,20 @@ function TweenInstance:OnComplete(callback)
     return self
 end
 
-function TweenInstance:Kill()
-    self.isDead = true  -- Помечаем твин для удаления
+function TweenInstance:Kill(complete)
+    if complete then
+        self:Complete()
+    else
+        self.isDead = true
+    end
     return self
 end
 
+
 function TweenInstance:update(dt)
-    self.elapsed = self.elapsed + dt
+    if dt > 0 then
+        self.elapsed = self.elapsed + dt
+    end
     local t = math.min(self.elapsed / self.duration, 1)
     local easedT = self.easing(t)
     
@@ -111,9 +294,18 @@ end
 
 -- Внутри класса TweenInstance
 function TweenInstance:Complete()
-    self.elapsed = self.duration  -- Устанавливаем время в конец
-    self:update(0)  -- Принудительно обновляем состояние до конечного
-    self:Kill()  -- Удаляем твин
+    self.elapsed = self.duration
+    self:update(0)
+    if self.onComplete then
+        self.onComplete()
+    end
+    self.isDead = true
+    return self
+end
+
+function TweenInstance:Rewind()
+    self.elapsed = 0
+    self:update(0)
     return self
 end
 
@@ -165,23 +357,22 @@ end
 function Tween.update(dt)
     for i = #Tween.animations, 1, -1 do
         local anim = Tween.animations[i]
-        
-        -- Если твин помечен как "убитый"
         if anim.isDead then
             table.remove(Tween.animations, i)
         else
-            local isCompleted = anim:update(dt)
-            
-            if isCompleted then
-                if anim.onComplete then
-                    anim.onComplete()
+            if anim.isSequence then
+                anim:update(dt)
+            elseif anim.isTween then
+                local isCompleted = anim:update(dt)
+                if isCompleted then
+                    if anim.onComplete then
+                        anim.onComplete()
+                    end
+                    anim.isDead = true
                 end
-                table.remove(Tween.animations, i)
             end
         end
     end
 end
-
-
 
 return Tween
