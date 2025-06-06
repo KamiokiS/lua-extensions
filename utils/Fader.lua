@@ -38,15 +38,14 @@ function Fader.update(deltaTime)
     Fader.elapsed = Fader.elapsed + deltaTime
     local progress = math.min(Fader.elapsed / Fader.duration, 1.0)
     
-    -- Линейная интерполяция альфа-канала
     Fader.currentAlpha = Fader.startAlpha + (Fader.targetAlpha - Fader.startAlpha) * progress
     
-    -- Проверка завершения анимации
     if progress >= 1.0 then
         Fader.active = false
-        if Fader.callback then
-            Fader.callback()
-            Fader.callback = nil
+        local cb = Fader.callback -- Сохраняем callback во временную переменную
+        Fader.callback = nil       -- Сбрасываем до вызова
+        if cb then
+            cb()                   -- Вызываем callback
         end
     end
 end
