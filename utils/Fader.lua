@@ -10,27 +10,31 @@ local Fader = {
     callback = nil
 }
 
-function Fader.start(targetAlpha, duration, color)
-    -- Остановить предыдущую анимацию если была активна
-    if Fader.active then
-        Fader.active = false
+ function Fader.start(targetAlpha, duration, color)
+    if targetAlpha > 1 then
+        error("Fader accepts alpha values in the range from 0 to 1", 2)
     end
-    
-    -- Установка параметров
-    Fader.startAlpha = Fader.currentAlpha
-    Fader.targetAlpha = targetAlpha
-    Fader.duration = duration
-    Fader.elapsed = 0
-    Fader.color = color or Color.new(0, 0, 0, 255)
-    Fader.active = true
-    
-    -- Возвращаем таблицу с методом для callback
-    return {
-        OnComplete = function(self, cb)
-            Fader.callback = cb
-        end
-    }
-end
+     -- Остановить предыдущую анимацию если была активна
+     if Fader.active then
+         Fader.active = false
+     end
+     
+     -- Установка параметров
+     Fader.startAlpha = Fader.currentAlpha
+     Fader.targetAlpha = targetAlpha * 255
+     Fader.duration = duration
+     Fader.elapsed = 0
+     Fader.color = color or Color.new(0, 0, 0, 255)
+     Fader.active = true
+     
+     -- Возвращаем таблицу с методом для callback
+     return {
+         OnComplete = function(self, cb)
+             Fader.callback = cb
+         end
+     }
+ end
+
 
 function Fader.update(deltaTime)
     if not Fader.active then return end
