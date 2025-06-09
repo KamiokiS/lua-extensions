@@ -14,6 +14,11 @@ local Fader = {
     if targetAlpha > 1 then
         error("Fader accepts alpha values in the range from 0 to 1", 2)
     end
+
+    if duration <= 0 then
+        duration = 0.1
+    end
+
      -- Остановить предыдущую анимацию если была активна
      if Fader.active then
          Fader.active = false

@@ -75,7 +75,6 @@ function Sequence.new()
 end
 
 function Sequence:Append(tween)
-    Logger.log("Добавили секвенцию")
     local startTime = self.duration
     local element = {
         type = "tween",
@@ -91,7 +90,6 @@ function Sequence:Append(tween)
 end
 
 function Sequence:Join(tween)
-    Logger.log("присоединили секвенцию")
     if #self.elements == 0 then
         return self:Append(tween)
     end
@@ -132,7 +130,6 @@ function Sequence:update(dt)
     if self.isDead or self.isPaused then return end
     self.currentTime = self.currentTime + dt
 
-    Logger.log("Обновляем секвенцию")
     -- Обновляем элементы последовательности
     for _, element in ipairs(self.elements) do
         if element.type == "tween" and not element.completed then
